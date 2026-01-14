@@ -217,7 +217,17 @@
 <body>
   <h1>📖 Manga Reader</h1>
 
+  <div class="library" id="librarySection">
+    <h2>📚 Library <span id="libraryCount"></span></h2>
+    <div class="library-list" id="libraryList"></div>
+  </div>
+
   <form id="loaderForm">
+    <label>
+      Base URL (change for different sites)
+      <input id="baseHost" value="https://img.manhuaus.com" placeholder="https://img.manhuaus.com" />
+    </label>
+
     <div class="row">
       <label>
         Slug
@@ -275,11 +285,6 @@
 
   <div id="gallery"></div>
 
-  <div class="library" id="librarySection">
-    <h2>📚 Library <span id="libraryCount"></span></h2>
-    <div class="library-list" id="libraryList"></div>
-  </div>
-
   <div class="floating-nav hidden" id="floatingNav">
     <button id="floatPrev">← Prev</button>
     <span class="current" id="floatCurrent">Ch. 1</span>
@@ -287,11 +292,9 @@
   </div>
 
   <details>
-    <summary>Settings</summary>
-    <label>
-      Base URL
-      <input id="baseHost" value="https://img.manhuaus.com" style="width:100%" />
-    </label>
+    <summary>Help</summary>
+    <p>URL pattern: <code>{base}/{slug}/{chapter}/{page}.{ext}</code></p>
+    <p>Example: <code>https://img.manhuaus.com/i-can-copy-talents/chapter-1/001.jpg</code></p>
   </details>
 
   <script>
