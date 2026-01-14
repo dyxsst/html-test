@@ -19,6 +19,7 @@ import sys
 import argparse
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from playwright_stealth import stealth_sync
 
 
 def get_env(key: str, default: str = None) -> str:
@@ -74,17 +75,32 @@ def scrape_chapter(slug: str, chapter: str, start: int, end: int, out_dir: str, 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080},
+            locale="en-US",
         )
         page = context.new_page()
+        
+        # Apply stealth to avoid bot detection
+        stealth_sync(page)
 
         try:
-            # Use domcontentloaded instead of networkidle (ads never stop loading)
+            # Initial page load
             page.goto(chapter_url, wait_until="domcontentloaded", timeout=30000)
-            # Wait for images to appear (manga reader content)
-            page.wait_for_selector("img", timeout=15000)
-            # Give a moment for lazy-loaded images to register
-            page.wait_for_timeout(2000)
+            
+            # Wait for Cloudflare challenge to complete (title changes from "Just a moment...")
+            print("Waiting for Cloudflare challenge...")
+            for attempt in range(30):  # Wait up to 30 seconds
+                title = page.title()
+                if "just a moment" not in title.lower() and "checking" not in title.lower():
+                    print(f"Page loaded: {title}")
+                    break
+                page.wait_for_timeout(1000)
+            else:
+                print(f"Warning: May still be on Cloudflare page. Title: {page.title()}")
+            
+            # Wait for actual content
+            page.wait_for_timeout(3000)
             
             # Scroll down the page to trigger lazy loading
             print("Scrolling page to load lazy images...")
@@ -101,7 +117,7 @@ def scrape_chapter(slug: str, chapter: str, start: int, end: int, out_dir: str, 
             sys.exit(1)
 
         # Debug: print page title and URL
-        print(f"Page title: {page.title()}")
+        print(f"Final page title: {page.title()}")
         
         # Find all images - check multiple attributes
         images = []
