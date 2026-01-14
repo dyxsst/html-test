@@ -84,30 +84,66 @@ def scrape_chapter(slug: str, chapter: str, start: int, end: int, out_dir: str, 
             # Wait for images to appear (manga reader content)
             page.wait_for_selector("img", timeout=15000)
             # Give a moment for lazy-loaded images to register
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(2000)
+            
+            # Scroll down the page to trigger lazy loading
+            print("Scrolling page to load lazy images...")
+            for _ in range(10):
+                page.keyboard.press("End")
+                page.wait_for_timeout(500)
+            # Scroll back up
+            page.keyboard.press("Home")
+            page.wait_for_timeout(1000)
+            
         except Exception as e:
             print(f"Failed to load page: {e}")
             browser.close()
             sys.exit(1)
 
-        # Find all images that look like manga pages
-        # Common patterns: img.manhuaus.com, cdn paths, or slug/chapter in URL
+        # Debug: print page title and URL
+        print(f"Page title: {page.title()}")
+        
+        # Find all images - check multiple attributes
         images = []
         for img in page.query_selector_all("img"):
-            src = img.get_attribute("src") or img.get_attribute("data-src") or ""
-            if not src:
+            # Check various src attributes (sites use different lazy loading)
+            src = (
+                img.get_attribute("src") or 
+                img.get_attribute("data-src") or 
+                img.get_attribute("data-lazy-src") or
+                img.get_attribute("data-original") or
+                ""
+            )
+            if not src or src.startswith("data:"):
                 continue
-            # Skip tiny images (icons, avatars, etc.)
-            if "avatar" in src.lower() or "logo" in src.lower() or "icon" in src.lower():
-                continue
-            # Look for chapter content images
-            if slug in src or chapter in src or "img." in src or "/uploads/" in src:
-                images.append(src.split("?")[0])  # Remove query params
+            images.append(src)
+        
+        # Also check for background images in divs (some readers use this)
+        for div in page.query_selector_all("div[style*='background-image']"):
+            style = div.get_attribute("style") or ""
+            match = re.search(r'url\(["\']?([^"\')\s]+)["\']?\)', style)
+            if match:
+                images.append(match.group(1))
 
+        print(f"Raw images found: {len(images)}")
+        if images[:5]:
+            print(f"Sample URLs: {images[:5]}")
+        
+        # Filter to likely manga page images
+        filtered_images = []
+        for src in images:
+            src_clean = src.split("?")[0]
+            # Skip tiny images (icons, avatars, etc.)
+            if any(skip in src.lower() for skip in ["avatar", "logo", "icon", "thumb", "gravatar", "wp-content/plugins"]):
+                continue
+            # Look for chapter content images - be more lenient
+            if any(pattern in src.lower() for pattern in [slug.lower(), chapter.lower(), "img.", "/uploads/", "chapter", ".jpg", ".png", ".webp"]):
+                filtered_images.append(src_clean)
+        
         # Deduplicate while preserving order
         seen = set()
         unique_images = []
-        for url in images:
+        for url in filtered_images:
             if url not in seen:
                 seen.add(url)
                 unique_images.append(url)
