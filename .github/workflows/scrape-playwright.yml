@@ -17,6 +17,22 @@ on:
         description: 'Manga page base URL'
         required: false
         default: 'https://manhuaus.com/manga'
+      start_page:
+        description: 'Start page (number)'
+        required: false
+        default: '1'
+      end_page:
+        description: 'End page (number)'
+        required: false
+        default: '25'
+      pad_width:
+        description: 'Zero pad width (e.g., 3)'
+        required: false
+        default: '3'
+      ext:
+        description: 'Image extension filter (jpg/png)'
+        required: false
+        default: 'jpg'
       commit_images:
         description: 'If true, commit downloaded images back to the repo'
         required: false
@@ -53,9 +69,14 @@ jobs:
         CHAPTER: ${{ github.event.inputs.chapter }}
         BASE_HOST: ${{ github.event.inputs.base_host }}
         PAGE_BASE: ${{ github.event.inputs.page_base }}
+        START_PAGE: ${{ github.event.inputs.start_page }}
+        END_PAGE: ${{ github.event.inputs.end_page }}
+        PAD_WIDTH: ${{ github.event.inputs.pad_width }}
+        EXT: ${{ github.event.inputs.ext }}
         OUT_DIR: images
       run: |
-        python scrape_playwright.py --slug "$SLUG" --chapter "$CHAPTER" --base-host "$BASE_HOST" --page-base "$PAGE_BASE" --out "$OUT_DIR"
+        python scrape_playwright.py --slug "$SLUG" --chapter "$CHAPTER" --base-host "$BASE_HOST" --page-base "$PAGE_BASE" --out "$OUT_DIR" \
+          --start "$START_PAGE" --end "$END_PAGE" --pad "$PAD_WIDTH" --ext "$EXT"
 
     - name: Upload images artifact
       uses: actions/upload-artifact@v4
