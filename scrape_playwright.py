@@ -19,6 +19,10 @@ def parse_args():
     p.add_argument("--base-host", default=os.getenv("BASE_HOST", "https://img.manhuaus.com"))
     p.add_argument("--page-base", default=os.getenv("PAGE_BASE", "https://manhuaus.com/manga"))
     p.add_argument("--out", default=os.getenv("OUT_DIR", "images"))
+    p.add_argument("--start", type=int, default=None, help="Optional start page to filter images")
+    p.add_argument("--end", type=int, default=None, help="Optional end page to filter images")
+    p.add_argument("--pad", type=int, default=None, help="Optional zero-pad width to match filenames (e.g. 3)")
+    p.add_argument("--ext", default=None, help="Optional extension filter (jpg/png)")
     return p.parse_args()
 
 
@@ -65,6 +69,34 @@ def main():
             if u not in seen:
                 seen.add(u)
                 imgs.append(u)
+
+        # Optional filtering by page range / pad / ext if provided
+        def filename_to_page(name, pad_hint=None):
+            stem = Path(name).stem
+            if stem.isdigit():
+                return int(stem)
+            # try to extract trailing digits
+            import re
+            m = re.search(r"(\d+)$", stem)
+            if m:
+                return int(m.group(1))
+            return None
+
+        if args.start is not None or args.end is not None or args.pad is not None or args.ext is not None:
+            filtered = []
+            for u in imgs:
+                fname = Path(u).name
+                if args.ext and not fname.lower().endswith('.' + args.ext.lower()):
+                    continue
+                page_num = filename_to_page(fname, args.pad)
+                if page_num is None:
+                    continue
+                if args.start is not None and page_num < args.start:
+                    continue
+                if args.end is not None and page_num > args.end:
+                    continue
+                filtered.append(u)
+            imgs = filtered
 
         print(f"Found {len(imgs)} image(s)")
 
