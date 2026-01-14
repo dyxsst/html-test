@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Static Image Loader (Public URLs)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, Arial, sans-serif; margin: 1.5rem; }
+    form { display: grid; gap: 0.75rem; max-width: 720px; }
+    label { display: grid; gap: 0.25rem; }
+    input, button, select {
+      padding: 0.5rem 0.6rem; font-size: 1rem;
+    }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    #status { margin-top: 0.75rem; font-size: 0.95rem; }
+    #gallery { margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+    figure { margin: 0; border: 1px solid rgba(128,128,128,0.2); border-radius: 8px; overflow: hidden; background: rgba(128,128,128,0.08); }
+    figcaption { padding: 0.5rem; font-size: 0.9rem; opacity: 0.8; }
+    .imgwrap { display: grid; place-items: center; background: #00000010; min-height: 320px; }
+    img { width: 100%; height: auto; display: block; }
+    .error { color: #b00020; }
+    .ok { color: #1b5e20; }
+    details { margin-top: 1rem; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+  </style>
+</head>
+<body>
+  <h1>Static Image Loader (Public URLs)</h1>
+  <p>
+    This page constructs image URLs in the form:
+    <code>https://img.manhuaus.com/&lt;slug&gt;/&lt;chapter&gt;/&lt;page&gt;.jpg</code> and attempts to load them.
+  </p>
+
+  <form id="loaderForm">
+    <label>
+      Base host (read-only)
+      <input id="baseHost" value="https://img.manhuaus.com" readonly />
+    </label>
+
+    <div class="row">
+      <label>
+        Slug (e.g., <code>i-can-copy-talents</code>)
+        <input id="slug" placeholder="i-can-copy-talents" required />
+      </label>
+      <label>
+        Chapter (e.g., <code>chapter-1</code>)
+        <input id="chapter" placeholder="chapter-1" required />
+      </label>
+    </div>
+
+    <div class="row">
+      <label>
+        Start page (number)
+        <input id="startPage" type="number" min="1" value="1" required />
+      </label>
+      <label>
+        End page (number)
+        <input id="endPage" type="number" min="1" value="25" required />
+      </label>
+    </div>
+
+    <div class="row">
+      <label>
+        Zero pad width
+        <select id="padWidth">
+          <option value="3" selected>3 → 001.jpg</option>
+          <option value="2">2 → 01.jpg</option>
+          <option value="1">1 → 1.jpg</option>
+        </select>
+      </label>
+      <label>
+        Extension
+        <select id="ext">
+          <option value="jpg" selected>.jpg</option>
+          <option value="jpeg">.jpeg</option>
+          <option value="png">.png</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="actions">
+      <button type="submit">Load images</button>
+      <button type="button" id="clearBtn">Clear</button>
+    </div>
+    <div id="status" aria-live="polite"></div>
+  </form>
+
+  <div id="gallery" aria-live="polite"></div>
+
+  <details>
+    <summary>Notes (read before use)</summary>
+    <ul>
+      <li>This does <strong>not bypass</strong> CAPTCHAs, geoblocks, rate limits, or hotlink protections.</li>
+      <li>If the site blocks hotlinking or requires special headers, images may show as broken.</li>
+      <li>Use responsibly for personal viewing; do not download or redistribute copyrighted content.</li>
+    </ul>
+  </details>
+
+  <script>
+    function pad(num, width) {
+      const n = String(num);
+      return n.length >= width ? n : "0".repeat(width - n.length) + n;
+    }
+
+    function buildURL(base, slug, chapter, page, width, ext) {
+      const filename = pad(page, width) + "." + ext;
+      // Example: https://img.manhuaus.com/i-can-copy-talents/chapter-1/002.jpg
+      return `${base}/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}/${filename}`;
+    }
+
+    function createFigure(idx, url) {
+      const figure = document.createElement("figure");
+      const wrap = document.createElement("div");
+      wrap.className = "imgwrap";
+
+      const img = document.createElement("img");
+      img.loading = "lazy";
+      img.decoding = "async";
+      img.src = url;
+      img.alt = `Page ${idx} (${url})`;
+
+      const cap = document.createElement("figcaption");
+      cap.textContent = `Page ${idx} — ${url}`;
+
+      img.addEventListener("error", () => {
+        cap.classList.add("error");
+        cap.textContent = `Page ${idx} — failed to load: ${url}`;
+      });
+      img.addEventListener("load", () => {
+        cap.classList.remove("error");
+        cap.classList.add("ok");
+        cap.textContent = `Page ${idx} — loaded`;
+      });
+
+      wrap.appendChild(img);
+      figure.appendChild(wrap);
+      figure.appendChild(cap);
+      return figure;
+    }
+
+    const form = document.getElementById("loaderForm");
+    const gallery = document.getElementById("gallery");
+    const status = document.getElementById("status");
+    const clearBtn = document.getElementById("clearBtn");
+
+    clearBtn.addEventListener("click", () => {
+      gallery.innerHTML = "";
+      status.textContent = "Cleared.";
+    });
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      gallery.innerHTML = "";
+
+      const base = document.getElementById("baseHost").value.trim();
+      const slug = document.getElementById("slug").value.trim();
+      const chapter = document.getElementById("chapter").value.trim();
+      const start = parseInt(document.getElementById("startPage").value, 10);
+      const end = parseInt(document.getElementById("endPage").value, 10);
+      const width = parseInt(document.getElementById("padWidth").value, 10);
+      const ext = document.getElementById("ext").value;
+
+      if (!base || !slug || !chapter || isNaN(start) || isNaN(end) || start < 1 || end < start) {
+        status.textContent = "Please fill valid inputs (end ≥ start ≥ 1).";
+        return;
+      }
+
+      status.textContent = `Loading ${end - start + 1} image(s)...`;
+
+      // Progressive append to avoid overwhelming the browser.
+      const fragment = document.createDocumentFragment();
+      for (let p = start; p <= end; p++) {
+        const url = buildURL(base, slug, chapter, p, width, ext);
+        fragment.appendChild(createFigure(p, url));
+      }
+      gallery.appendChild(fragment);
+      status.textContent = `Attempted to load ${end - start + 1} image(s).`;
+    });
+  </script>
+</body>
+</html>
