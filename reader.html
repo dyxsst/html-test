@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Manga Reader</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body { 
+      font-family: system-ui, Arial, sans-serif; 
+      margin: 0; 
+      padding: 0.5rem;
+      min-height: 100vh;
+    }
+    h1 { font-size: 1.25rem; margin: 0 0 0.5rem 0; }
+    
+    /* Responsive form */
+    form { display: grid; gap: 0.5rem; max-width: 100%; }
+    label { display: grid; gap: 0.15rem; font-size: 0.85rem; }
+    input, button, select {
+      padding: 0.4rem; 
+      font-size: 1rem;
+      border: 1px solid #666;
+      border-radius: 4px;
+    }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    @media (max-width: 400px) {
+      .row { grid-template-columns: 1fr; }
+    }
+    
+    /* Chapter navigation */
+    .chapter-nav {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .chapter-nav button {
+      flex: 1;
+      min-width: 80px;
+      padding: 0.6rem;
+      font-weight: bold;
+      background: #4a90d9;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    .chapter-nav button:hover { background: #3a7bc8; }
+    .chapter-nav button:disabled { background: #999; cursor: not-allowed; }
+    
+    /* Actions row */
+    .actions { 
+      display: flex; 
+      gap: 0.5rem; 
+      flex-wrap: wrap;
+      margin-top: 0.25rem;
+    }
+    .actions button { flex: 1; min-width: 100px; }
+    #loadBtn { background: #2e7d32; color: white; border: none; cursor: pointer; }
+    #loadBtn:hover { background: #1b5e20; }
+    #clearBtn { background: #666; color: white; border: none; cursor: pointer; }
+    
+    #status { margin-top: 0.5rem; font-size: 0.9rem; }
+    
+    /* Gallery - single column for reading */
+    #gallery { 
+      margin-top: 0.75rem; 
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    figure { 
+      margin: 0; 
+      border-radius: 4px; 
+      overflow: hidden; 
+      background: rgba(128,128,128,0.08); 
+    }
+    figcaption { 
+      padding: 0.25rem 0.5rem; 
+      font-size: 0.75rem; 
+      opacity: 0.7;
+      text-align: center;
+    }
+    .imgwrap { 
+      display: flex;
+      justify-content: center;
+      background: #111; 
+    }
+    img { 
+      max-width: 100%; 
+      height: auto; 
+      display: block; 
+    }
+    .error { color: #f44336; }
+    .ok { color: #4caf50; }
+    
+    /* Floating nav at bottom */
+    .floating-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0,0,0,0.9);
+      padding: 0.5rem;
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .floating-nav button {
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      font-weight: bold;
+      background: #4a90d9;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .floating-nav button:hover { background: #3a7bc8; }
+    .floating-nav .current {
+      color: white;
+      display: flex;
+      align-items: center;
+      padding: 0 0.5rem;
+    }
+    
+    /* Hide floating nav when gallery empty */
+    .floating-nav.hidden { display: none; }
+    
+    /* Bottom padding so content isn't hidden behind floating nav */
+    #gallery { padding-bottom: 60px; }
+    
+    details { margin-top: 0.5rem; font-size: 0.8rem; }
+    code { font-family: ui-monospace, monospace; font-size: 0.85em; }
+  </style>
+</head>
+<body>
+  <h1>📖 Manga Reader</h1>
+
+  <form id="loaderForm">
+    <div class="row">
+      <label>
+        Slug
+        <input id="slug" placeholder="i-can-copy-talents" required />
+      </label>
+      <label>
+        Chapter
+        <input id="chapter" placeholder="chapter-1" required />
+      </label>
+    </div>
+
+    <div class="row">
+      <label>
+        Start page
+        <input id="startPage" type="number" min="1" value="1" required />
+      </label>
+      <label>
+        End page
+        <input id="endPage" type="number" min="1" value="30" required />
+      </label>
+    </div>
+
+    <div class="row">
+      <label>
+        Padding
+        <select id="padWidth">
+          <option value="3" selected>001</option>
+          <option value="2">01</option>
+          <option value="1">1</option>
+        </select>
+      </label>
+      <label>
+        Ext
+        <select id="ext">
+          <option value="jpg" selected>.jpg</option>
+          <option value="png">.png</option>
+          <option value="webp">.webp</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="actions">
+      <button type="submit" id="loadBtn">Load Chapter</button>
+      <button type="button" id="clearBtn">Clear</button>
+    </div>
+    
+    <div class="chapter-nav">
+      <button type="button" id="prevChapter">← Previous</button>
+      <button type="button" id="nextChapter">Next →</button>
+    </div>
+    
+    <div id="status" aria-live="polite"></div>
+  </form>
+
+  <div id="gallery"></div>
+
+  <div class="floating-nav hidden" id="floatingNav">
+    <button id="floatPrev">← Prev</button>
+    <span class="current" id="floatCurrent">Ch. 1</span>
+    <button id="floatNext">Next →</button>
+  </div>
+
+  <details>
+    <summary>Settings</summary>
+    <label>
+      Base URL
+      <input id="baseHost" value="https://img.manhuaus.com" style="width:100%" />
+    </label>
+  </details>
+
+  <script>
+    // Parse chapter number from string like "chapter-1" or "chapter-123"
+    function parseChapterNum(chapter) {
+      const match = chapter.match(/(\d+)$/);
+      return match ? parseInt(match[1], 10) : null;
+    }
+
+    // Build chapter string from number
+    function buildChapter(chapter, newNum) {
+      return chapter.replace(/\d+$/, newNum);
+    }
+
+    // Change chapter by delta (-1 or +1)
+    function changeChapter(delta) {
+      const chapterInput = document.getElementById("chapter");
+      const chapter = chapterInput.value.trim();
+      const num = parseChapterNum(chapter);
+      if (num === null) {
+        alert("Can't parse chapter number from: " + chapter);
+        return;
+      }
+      const newNum = num + delta;
+      if (newNum < 1) {
+        alert("Already at chapter 1");
+        return;
+      }
+      chapterInput.value = buildChapter(chapter, newNum);
+      updateFloatingNav();
+      document.getElementById("loaderForm").dispatchEvent(new Event("submit"));
+    }
+
+    function updateFloatingNav() {
+      const chapter = document.getElementById("chapter").value.trim();
+      const num = parseChapterNum(chapter);
+      document.getElementById("floatCurrent").textContent = num ? `Ch. ${num}` : chapter;
+    }
+
+    function pad(num, width) {
+      const n = String(num);
+      return n.length >= width ? n : "0".repeat(width - n.length) + n;
+    }
+
+    function buildURL(base, slug, chapter, page, width, ext) {
+      const filename = pad(page, width) + "." + ext;
+      return `${base}/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}/${filename}`;
+    }
+
+    function createFigure(idx, url) {
+      const figure = document.createElement("figure");
+      const wrap = document.createElement("div");
+      wrap.className = "imgwrap";
+
+      const img = document.createElement("img");
+      img.loading = "lazy";
+      img.decoding = "async";
+      img.src = url;
+      img.alt = `Page ${idx}`;
+
+      const cap = document.createElement("figcaption");
+      cap.textContent = `Page ${idx}`;
+
+      img.addEventListener("error", () => {
+        cap.classList.add("error");
+        cap.textContent = `Page ${idx} — failed`;
+        // Hide failed images after a moment
+        figure.style.display = "none";
+      });
+      img.addEventListener("load", () => {
+        cap.classList.add("ok");
+      });
+
+      wrap.appendChild(img);
+      figure.appendChild(wrap);
+      figure.appendChild(cap);
+      return figure;
+    }
+
+    const form = document.getElementById("loaderForm");
+    const gallery = document.getElementById("gallery");
+    const status = document.getElementById("status");
+    const clearBtn = document.getElementById("clearBtn");
+    const prevBtn = document.getElementById("prevChapter");
+    const nextBtn = document.getElementById("nextChapter");
+    const floatingNav = document.getElementById("floatingNav");
+    const floatPrev = document.getElementById("floatPrev");
+    const floatNext = document.getElementById("floatNext");
+
+    clearBtn.addEventListener("click", () => {
+      gallery.innerHTML = "";
+      status.textContent = "Cleared.";
+      floatingNav.classList.add("hidden");
+    });
+
+    prevBtn.addEventListener("click", () => changeChapter(-1));
+    nextBtn.addEventListener("click", () => changeChapter(1));
+    floatPrev.addEventListener("click", () => changeChapter(-1));
+    floatNext.addEventListener("click", () => changeChapter(1));
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      gallery.innerHTML = "";
+
+      const base = document.getElementById("baseHost").value.trim();
+      const slug = document.getElementById("slug").value.trim();
+      const chapter = document.getElementById("chapter").value.trim();
+      const start = parseInt(document.getElementById("startPage").value, 10);
+      const end = parseInt(document.getElementById("endPage").value, 10);
+      const width = parseInt(document.getElementById("padWidth").value, 10);
+      const ext = document.getElementById("ext").value;
+
+      if (!base || !slug || !chapter || isNaN(start) || isNaN(end) || start < 1 || end < start) {
+        status.textContent = "Please fill valid inputs.";
+        return;
+      }
+
+      status.textContent = `Loading ${end - start + 1} image(s)...`;
+      updateFloatingNav();
+      floatingNav.classList.remove("hidden");
+
+      const fragment = document.createDocumentFragment();
+      for (let p = start; p <= end; p++) {
+        const url = buildURL(base, slug, chapter, p, width, ext);
+        fragment.appendChild(createFigure(p, url));
+      }
+      gallery.appendChild(fragment);
+      status.textContent = `Loaded. Failed images auto-hide.`;
+      
+      // Scroll to top
+      window.scrollTo(0, 0);
+    });
+
+    // Save/restore form state
+    function saveState() {
+      const state = {
+        slug: document.getElementById("slug").value,
+        chapter: document.getElementById("chapter").value,
+        startPage: document.getElementById("startPage").value,
+        endPage: document.getElementById("endPage").value,
+        padWidth: document.getElementById("padWidth").value,
+        ext: document.getElementById("ext").value,
+        baseHost: document.getElementById("baseHost").value,
+      };
+      localStorage.setItem("mangaReaderState", JSON.stringify(state));
+    }
+
+    function loadState() {
+      try {
+        const state = JSON.parse(localStorage.getItem("mangaReaderState"));
+        if (state) {
+          if (state.slug) document.getElementById("slug").value = state.slug;
+          if (state.chapter) document.getElementById("chapter").value = state.chapter;
+          if (state.startPage) document.getElementById("startPage").value = state.startPage;
+          if (state.endPage) document.getElementById("endPage").value = state.endPage;
+          if (state.padWidth) document.getElementById("padWidth").value = state.padWidth;
+          if (state.ext) document.getElementById("ext").value = state.ext;
+          if (state.baseHost) document.getElementById("baseHost").value = state.baseHost;
+        }
+      } catch (e) {}
+    }
+
+    // Auto-save on input change
+    form.addEventListener("input", saveState);
+    
+    // Load saved state on page load
+    loadState();
+  </script>
+</body>
+</html>
