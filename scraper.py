@@ -55,11 +55,18 @@ def build_url(base, slug, chapter, page, pad_width, ext):
     return f"{base.rstrip('/')}/{slug}/{chapter}/{filename}"
 
 
-def download(url, dest_path, timeout=15, retries=3):
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; scraper/1.0)"}
+def download(url, dest_path, timeout=15, retries=3, referer=None):
+    # Use a browser-like header set to reduce chances of hotlink protection / blocking
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    if referer:
+        headers["Referer"] = referer
     for attempt in range(1, retries + 1):
         try:
-            resp = requests.get(url, headers=headers, timeout=timeout)
+            resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
             if resp.status_code == 200 and resp.content:
                 dest_path.write_bytes(resp.content)
                 return True
