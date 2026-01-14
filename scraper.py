@@ -27,16 +27,21 @@ import requests
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--slug", help="manga slug", default=os.getenv("SLUG"))
-    p.add_argument("--chapter", help="chapter name", default=os.getenv("CHAPTER"))
-    p.add_argument("--start", type=int, help="start page", default=int(os.getenv("START_PAGE" or 1)))
-    p.add_argument("--end", type=int, help="end page", default=int(os.getenv("END_PAGE" or 1)))
-    p.add_argument("--pad", type=int, help="pad width", default=int(os.getenv("PAD_WIDTH" or 3)))
-    p.add_argument("--ext", help="file extension", default=os.getenv("EXT" or "jpg"))
-    p.add_argument("--base", help="base host", default=os.getenv("BASE_HOST" or "https://img.manhuaus.com"))
-    p.add_argument("--out", help="output dir", default=os.getenv("OUT_DIR" or "images"))
-    p.add_argument("--delay", type=float, help="delay seconds between requests", default=float(os.getenv("DELAY" or 0.4)))
-    p.add_argument("--timeout", type=float, help="request timeout seconds", default=float(os.getenv("TIMEOUT" or 15)))
+
+    def env(key, default=None):
+        val = os.getenv(key)
+        return val if val is not None else default
+
+    p.add_argument("--slug", help="manga slug", default=env("SLUG"))
+    p.add_argument("--chapter", help="chapter name", default=env("CHAPTER"))
+    p.add_argument("--start", type=int, help="start page", default=int(env("START_PAGE", "1")))
+    p.add_argument("--end", type=int, help="end page", default=int(env("END_PAGE", "1")))
+    p.add_argument("--pad", type=int, help="pad width", default=int(env("PAD_WIDTH", "3")))
+    p.add_argument("--ext", help="file extension", default=env("EXT", "jpg"))
+    p.add_argument("--base", help="base host", default=env("BASE_HOST", "https://img.manhuaus.com"))
+    p.add_argument("--out", help="output dir", default=env("OUT_DIR", "images"))
+    p.add_argument("--delay", type=float, help="delay seconds between requests", default=float(env("DELAY", "0.4")))
+    p.add_argument("--timeout", type=float, help="request timeout seconds", default=float(env("TIMEOUT", "15")))
     return p.parse_args()
 
 
