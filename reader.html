@@ -132,6 +132,84 @@
     /* Bottom padding so content isn't hidden behind floating nav */
     #gallery { padding-bottom: 60px; }
     
+    /* Library section */
+    .library {
+      margin-top: 1rem;
+      padding: 0.5rem;
+      background: rgba(128,128,128,0.1);
+      border-radius: 8px;
+    }
+    .library h2 {
+      font-size: 1rem;
+      margin: 0 0 0.5rem 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .library-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .library-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .library-item:hover {
+      background: rgba(74,144,217,0.3);
+    }
+    .library-item.active {
+      background: rgba(74,144,217,0.5);
+      border-left: 3px solid #4a90d9;
+    }
+    .library-item .info {
+      flex: 1;
+      overflow: hidden;
+    }
+    .library-item .title {
+      font-weight: bold;
+      font-size: 0.9rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .library-item .chapter {
+      font-size: 0.75rem;
+      opacity: 0.7;
+    }
+    .library-item .delete-btn {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      background: #c62828;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .library-item .delete-btn:hover {
+      background: #b71c1c;
+    }
+    .library-empty {
+      font-size: 0.85rem;
+      opacity: 0.6;
+      text-align: center;
+      padding: 0.5rem;
+    }
+    #saveLibraryBtn {
+      background: #7b1fa2;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    #saveLibraryBtn:hover {
+      background: #6a1b9a;
+    }
+    
     details { margin-top: 0.5rem; font-size: 0.8rem; }
     code { font-family: ui-monospace, monospace; font-size: 0.85em; }
   </style>
@@ -183,6 +261,7 @@
 
     <div class="actions">
       <button type="submit" id="loadBtn">Load Chapter</button>
+      <button type="button" id="saveLibraryBtn">💾 Save</button>
       <button type="button" id="clearBtn">Clear</button>
     </div>
     
@@ -195,6 +274,11 @@
   </form>
 
   <div id="gallery"></div>
+
+  <div class="library" id="librarySection">
+    <h2>📚 Library <span id="libraryCount"></span></h2>
+    <div class="library-list" id="libraryList"></div>
+  </div>
 
   <div class="floating-nav hidden" id="floatingNav">
     <button id="floatPrev">← Prev</button>
@@ -375,6 +459,145 @@
     
     // Load saved state on page load
     loadState();
+
+    // ========== LIBRARY FUNCTIONS ==========
+    
+    function getLibrary() {
+      try {
+        return JSON.parse(localStorage.getItem("mangaLibrary")) || [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveLibrary(library) {
+      localStorage.setItem("mangaLibrary", JSON.stringify(library));
+    }
+
+    function addToLibrary() {
+      const slug = document.getElementById("slug").value.trim();
+      const chapter = document.getElementById("chapter").value.trim();
+      const baseHost = document.getElementById("baseHost").value.trim();
+      const padWidth = document.getElementById("padWidth").value;
+      const ext = document.getElementById("ext").value;
+      const startPage = document.getElementById("startPage").value;
+      const endPage = document.getElementById("endPage").value;
+
+      if (!slug || !chapter) {
+        alert("Enter slug and chapter first");
+        return;
+      }
+
+      let library = getLibrary();
+      
+      // Check if already exists, update if so
+      const existingIndex = library.findIndex(item => item.slug === slug);
+      const entry = {
+        slug,
+        chapter,
+        baseHost,
+        padWidth,
+        ext,
+        startPage,
+        endPage,
+        updatedAt: Date.now()
+      };
+
+      if (existingIndex >= 0) {
+        library[existingIndex] = entry;
+      } else {
+        library.unshift(entry); // Add to beginning
+      }
+
+      saveLibrary(library);
+      renderLibrary();
+      status.textContent = `Saved "${slug}" at ${chapter}`;
+    }
+
+    function loadFromLibrary(entry) {
+      document.getElementById("slug").value = entry.slug;
+      document.getElementById("chapter").value = entry.chapter;
+      if (entry.baseHost) document.getElementById("baseHost").value = entry.baseHost;
+      if (entry.padWidth) document.getElementById("padWidth").value = entry.padWidth;
+      if (entry.ext) document.getElementById("ext").value = entry.ext;
+      if (entry.startPage) document.getElementById("startPage").value = entry.startPage;
+      if (entry.endPage) document.getElementById("endPage").value = entry.endPage;
+      
+      saveState();
+      renderLibrary();
+      
+      // Auto-load the chapter
+      form.dispatchEvent(new Event("submit"));
+    }
+
+    function deleteFromLibrary(slug) {
+      if (!confirm(`Remove "${slug}" from library?`)) return;
+      let library = getLibrary();
+      library = library.filter(item => item.slug !== slug);
+      saveLibrary(library);
+      renderLibrary();
+    }
+
+    function renderLibrary() {
+      const library = getLibrary();
+      const listEl = document.getElementById("libraryList");
+      const countEl = document.getElementById("libraryCount");
+      const currentSlug = document.getElementById("slug").value.trim();
+
+      countEl.textContent = library.length ? `(${library.length})` : "";
+
+      if (library.length === 0) {
+        listEl.innerHTML = '<div class="library-empty">No saved manga yet. Load a chapter and click Save!</div>';
+        return;
+      }
+
+      listEl.innerHTML = library.map(entry => {
+        const isActive = entry.slug === currentSlug ? "active" : "";
+        const displayName = entry.slug.replace(/-/g, " ");
+        const chapterNum = parseChapterNum(entry.chapter);
+        const chapterDisplay = chapterNum ? `Chapter ${chapterNum}` : entry.chapter;
+        
+        return `
+          <div class="library-item ${isActive}" data-slug="${entry.slug}">
+            <div class="info" onclick="loadFromLibrary(${JSON.stringify(entry).replace(/"/g, '&quot;')})">
+              <div class="title">${displayName}</div>
+              <div class="chapter">${chapterDisplay}</div>
+            </div>
+            <button class="delete-btn" onclick="event.stopPropagation(); deleteFromLibrary('${entry.slug}')">✕</button>
+          </div>
+        `;
+      }).join("");
+    }
+
+    // Update library when changing chapters
+    function updateLibraryChapter() {
+      const slug = document.getElementById("slug").value.trim();
+      const chapter = document.getElementById("chapter").value.trim();
+      if (!slug) return;
+
+      let library = getLibrary();
+      const entry = library.find(item => item.slug === slug);
+      if (entry) {
+        entry.chapter = chapter;
+        entry.updatedAt = Date.now();
+        saveLibrary(library);
+        renderLibrary();
+      }
+    }
+
+    // Hook into chapter changes to auto-update library
+    const originalChangeChapter = changeChapter;
+    changeChapter = function(delta) {
+      originalChangeChapter(delta);
+      // After chapter loads, update library
+      setTimeout(updateLibraryChapter, 100);
+    };
+
+    // Save to library button
+    document.getElementById("saveLibraryBtn").addEventListener("click", addToLibrary);
+
+    // Initial render
+    renderLibrary();
   </script>
 </body>
 </html>
