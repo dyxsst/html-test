@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manga Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #333;
+            color: #fff;
+        }
+
+        #controls {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #555;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+
+        button:hover {
+            background-color: #777;
+        }
+
+        #viewer {
+            width: 100%;
+            max-width: 800px;
+            margin-bottom: 60px; /* Space for controls */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .page {
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 10px;
+            display: none; /* Hide all by default */
+        }
+
+        .page.active {
+            display: block; /* Show active page */
+        }
+    </style>
+</head>
+<body>
+
+    <div id="viewer">
+        <!-- Placeholder Images -->
+        <img src="https://via.placeholder.com/800x1200?text=Page+1" class="page active" alt="Page 1">
+        <img src="https://via.placeholder.com/800x1200?text=Page+2" class="page" alt="Page 2">
+        <img src="https://via.placeholder.com/800x1200?text=Page+3" class="page" alt="Page 3">
+        <img src="https://via.placeholder.com/800x1200?text=Page+4" class="page" alt="Page 4">
+        <img src="https://via.placeholder.com/800x1200?text=Page+5" class="page" alt="Page 5">
+    </div>
+
+    <div id="controls">
+        <button onclick="prevPage()">Previous</button>
+        <span id="page-indicator" style="display: flex; align-items: center; margin: 0 10px;">Page 1 / 5</span>
+        <button onclick="nextPage()">Next</button>
+    </div>
+
+    <script>
+        let currentPage = 0;
+        const pages = document.querySelectorAll('.page');
+        const totalPages = pages.length;
+        const indicator = document.getElementById('page-indicator');
+
+        function updateViewer() {
+            pages.forEach((page, index) => {
+                if (index === currentPage) {
+                    page.classList.add('active');
+                } else {
+                    page.classList.remove('active');
+                }
+            });
+            indicator.innerText = `Page ${currentPage + 1} / ${totalPages}`;
+            window.scrollTo(0, 0); // Scroll to top on page change
+        }
+
+        function nextPage() {
+            if (currentPage < totalPages - 1) {
+                currentPage++;
+                updateViewer();
+            }
+        }
+
+        function prevPage() {
+            if (currentPage > 0) {
+                currentPage--;
+                updateViewer();
+            }
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') nextPage();
+            if (e.key === 'ArrowLeft') prevPage();
+        });
+    </script>
+
+</body>
+</html>
