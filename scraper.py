@@ -19,7 +19,6 @@ import sys
 import argparse
 from pathlib import Path
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth_sync
 
 
 def get_env(key: str, default: str = None) -> str:
@@ -73,16 +72,31 @@ def scrape_chapter(slug: str, chapter: str, start: int, end: int, out_dir: str, 
     print("-" * 50)
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        # Launch with args to avoid detection
+        browser = pw.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+            ]
+        )
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             viewport={"width": 1920, "height": 1080},
             locale="en-US",
+            java_script_enabled=True,
         )
-        page = context.new_page()
         
-        # Apply stealth to avoid bot detection
-        stealth_sync(page)
+        # Remove webdriver property to avoid detection
+        context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+            window.chrome = { runtime: {} };
+        """)
+        
+        page = context.new_page()
 
         try:
             # Initial page load
