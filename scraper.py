@@ -1,115 +1,175 @@
 #!/usr/bin/env python3
-"""Download images from a host that serves images at
-<base>/<slug>/<chapter>/<page>.<ext>
+"""
+Manga Chapter Scraper using Playwright
 
-Usage: The script reads configuration from environment variables or CLI args.
-Environment variables / CLI args (prefer env in Actions):
-  BASE_HOST (default: https://img.manhuaus.com)
-  SLUG
-  CHAPTER
-  START_PAGE (int)
-  END_PAGE (int)
-  PAD_WIDTH (int, default 3)
-  EXT (jpg/png, default jpg)
-  OUT_DIR (default images)
+Downloads chapter images from manga sites by opening the chapter page
+in a headless browser and saving the images. This bypasses hotlink
+protection since images are fetched within a real browser context.
 
-The script will save files to OUT_DIR/<slug>/<chapter>/001.jpg etc.
+Usage:
+    python scraper.py --slug "i-can-copy-talents" --chapter "chapter-1"
+
+Environment variables (for GitHub Actions):
+    SLUG, CHAPTER, START_PAGE, END_PAGE, OUT_DIR
 """
 
 import os
+import re
 import sys
-import time
 import argparse
 from pathlib import Path
+from playwright.sync_api import sync_playwright
 
-import requests
+
+def get_env(key: str, default: str = None) -> str:
+    """Get environment variable or return default."""
+    return os.getenv(key) or default
 
 
 def parse_args():
-    p = argparse.ArgumentParser()
-
-    def env(key, default=None):
-        val = os.getenv(key)
-        return val if val is not None else default
-
-    p.add_argument("--slug", help="manga slug", default=env("SLUG"))
-    p.add_argument("--chapter", help="chapter name", default=env("CHAPTER"))
-    p.add_argument("--start", type=int, help="start page", default=int(env("START_PAGE", "1")))
-    p.add_argument("--end", type=int, help="end page", default=int(env("END_PAGE", "1")))
-    p.add_argument("--pad", type=int, help="pad width", default=int(env("PAD_WIDTH", "3")))
-    p.add_argument("--ext", help="file extension", default=env("EXT", "jpg"))
-    p.add_argument("--base", help="base host", default=env("BASE_HOST", "https://img.manhuaus.com"))
-    p.add_argument("--out", help="output dir", default=env("OUT_DIR", "images"))
-    p.add_argument("--delay", type=float, help="delay seconds between requests", default=float(env("DELAY", "0.4")))
-    p.add_argument("--timeout", type=float, help="request timeout seconds", default=float(env("TIMEOUT", "15")))
+    """Parse command-line arguments with env var fallbacks."""
+    p = argparse.ArgumentParser(description="Download manga chapter images")
+    p.add_argument("--slug", default=get_env("SLUG"),
+                   help="Manga slug (e.g., i-can-copy-talents)")
+    p.add_argument("--chapter", default=get_env("CHAPTER"),
+                   help="Chapter (e.g., chapter-1)")
+    p.add_argument("--start", type=int, default=int(get_env("START_PAGE", "1")),
+                   help="Start page number (default: 1)")
+    p.add_argument("--end", type=int, default=int(get_env("END_PAGE", "100")),
+                   help="End page number (default: 100)")
+    p.add_argument("--out", default=get_env("OUT_DIR", "images"),
+                   help="Output directory (default: images)")
+    p.add_argument("--site", default=get_env("SITE_URL", "https://manhuaus.com/manga"),
+                   help="Base site URL for chapter pages")
     return p.parse_args()
 
 
-def pad(num, width):
-    s = str(num)
-    return s if len(s) >= width else ("0" * (width - len(s)) + s)
+def extract_page_number(filename: str) -> int | None:
+    """Extract numeric page from filename like '001.jpg' or 'page-5.png'."""
+    stem = Path(filename).stem
+    # Try pure numeric first
+    if stem.isdigit():
+        return int(stem)
+    # Try extracting trailing digits
+    match = re.search(r"(\d+)$", stem)
+    if match:
+        return int(match.group(1))
+    return None
 
 
-def build_url(base, slug, chapter, page, pad_width, ext):
-    filename = f"{pad(page, pad_width)}.{ext}"
-    return f"{base.rstrip('/')}/{slug}/{chapter}/{filename}"
+def scrape_chapter(slug: str, chapter: str, start: int, end: int, out_dir: str, site_url: str):
+    """
+    Open chapter page, find images, and download them.
+    Uses Playwright to handle hotlink protection via browser context.
+    """
+    chapter_url = f"{site_url.rstrip('/')}/{slug}/{chapter}/"
+    output_path = Path(out_dir) / slug / chapter
+    output_path.mkdir(parents=True, exist_ok=True)
 
+    print(f"Opening: {chapter_url}")
+    print(f"Saving to: {output_path}")
+    print(f"Page range: {start} - {end}")
+    print("-" * 50)
 
-def download(url, dest_path, timeout=15, retries=3, referer=None):
-    # Use a browser-like header set to reduce chances of hotlink protection / blocking
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-    }
-    if referer:
-        headers["Referer"] = referer
-    for attempt in range(1, retries + 1):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
+
         try:
-            resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
-            if resp.status_code == 200 and resp.content:
-                dest_path.write_bytes(resp.content)
-                return True
-            else:
-                print(f"[{attempt}] Bad response {resp.status_code} for {url}")
+            page.goto(chapter_url, wait_until="networkidle", timeout=60000)
         except Exception as e:
-            print(f"[{attempt}] Error fetching {url}: {e}")
-        time.sleep(1 + attempt * 0.6)
-    return False
+            print(f"Failed to load page: {e}")
+            browser.close()
+            sys.exit(1)
+
+        # Find all images that look like manga pages
+        # Common patterns: img.manhuaus.com, cdn paths, or slug/chapter in URL
+        images = []
+        for img in page.query_selector_all("img"):
+            src = img.get_attribute("src") or img.get_attribute("data-src") or ""
+            if not src:
+                continue
+            # Skip tiny images (icons, avatars, etc.)
+            if "avatar" in src.lower() or "logo" in src.lower() or "icon" in src.lower():
+                continue
+            # Look for chapter content images
+            if slug in src or chapter in src or "img." in src or "/uploads/" in src:
+                images.append(src.split("?")[0])  # Remove query params
+
+        # Deduplicate while preserving order
+        seen = set()
+        unique_images = []
+        for url in images:
+            if url not in seen:
+                seen.add(url)
+                unique_images.append(url)
+
+        print(f"Found {len(unique_images)} candidate image(s)")
+
+        # Filter by page range
+        filtered = []
+        for url in unique_images:
+            filename = Path(url).name
+            page_num = extract_page_number(filename)
+            if page_num is not None and start <= page_num <= end:
+                filtered.append((page_num, url, filename))
+
+        # Sort by page number
+        filtered.sort(key=lambda x: x[0])
+        print(f"After filtering: {len(filtered)} image(s) in range [{start}-{end}]")
+        print("-" * 50)
+
+        # Download each image using browser context (keeps cookies/headers)
+        success = 0
+        for page_num, url, filename in filtered:
+            dest = output_path / filename
+            if dest.exists():
+                print(f"[{page_num}] Skipping (exists): {filename}")
+                success += 1
+                continue
+
+            print(f"[{page_num}] Downloading: {filename}")
+            try:
+                response = context.request.get(url, headers={"Referer": chapter_url})
+                if response.status == 200:
+                    dest.write_bytes(response.body())
+                    success += 1
+                else:
+                    print(f"    Failed: HTTP {response.status}")
+            except Exception as e:
+                print(f"    Error: {e}")
+
+        browser.close()
+
+    print("-" * 50)
+    print(f"Done: {success}/{len(filtered)} images downloaded")
+    print(f"Saved to: {output_path}")
+    return success
 
 
 def main():
     args = parse_args()
 
     if not args.slug or not args.chapter:
-        print("Missing slug or chapter. Provide --slug and --chapter or set SLUG/CHAPTER env vars.")
-        sys.exit(2)
+        print("Error: --slug and --chapter are required")
+        print("Example: python scraper.py --slug i-can-copy-talents --chapter chapter-1")
+        sys.exit(1)
 
-    out_dir = Path(args.out) / args.slug / args.chapter
-    out_dir.mkdir(parents=True, exist_ok=True)
+    success = scrape_chapter(
+        slug=args.slug,
+        chapter=args.chapter,
+        start=args.start,
+        end=args.end,
+        out_dir=args.out,
+        site_url=args.site,
+    )
 
-    success_count = 0
-    attempted = 0
-
-    for p in range(args.start, args.end + 1):
-        url = build_url(args.base, args.slug, args.chapter, p, args.pad, args.ext)
-        filename = pad(p, args.pad) + "." + args.ext
-        dest = out_dir / filename
-        if dest.exists():
-            print(f"Skipping existing {dest}")
-            success_count += 1
-            attempted += 1
-            continue
-        print(f"Downloading {url} -> {dest}")
-        ok = download(url, dest, timeout=args.timeout)
-        attempted += 1
-        if ok:
-            success_count += 1
-        else:
-            print(f"Failed to download {url}")
-        time.sleep(args.delay)
-
-    print(f"Done: {success_count}/{attempted} succeeded. Files saved to {out_dir}")
+    # Exit with error code if nothing was downloaded
+    if success == 0:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

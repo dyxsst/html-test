@@ -1,0 +1,91 @@
+name: Scrape Manga Chapter
+
+on:
+  workflow_dispatch:
+    inputs:
+      slug:
+        description: 'Manga slug (e.g., i-can-copy-talents)'
+        required: true
+        type: string
+      chapter:
+        description: 'Chapter (e.g., chapter-1)'
+        required: true
+        type: string
+      start_page:
+        description: 'Start page number'
+        required: false
+        default: '1'
+        type: string
+      end_page:
+        description: 'End page number'
+        required: false
+        default: '100'
+        type: string
+      commit_images:
+        description: 'Commit images to repo? (false = artifact only)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright browsers
+        run: python -m playwright install chromium --with-deps
+
+      - name: Run scraper
+        env:
+          SLUG: ${{ inputs.slug }}
+          CHAPTER: ${{ inputs.chapter }}
+          START_PAGE: ${{ inputs.start_page }}
+          END_PAGE: ${{ inputs.end_page }}
+          OUT_DIR: images
+        run: |
+          python scraper.py \
+            --slug "$SLUG" \
+            --chapter "$CHAPTER" \
+            --start "$START_PAGE" \
+            --end "$END_PAGE" \
+            --out "$OUT_DIR"
+
+      - name: Upload images as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: manga-${{ inputs.slug }}-${{ inputs.chapter }}
+          path: images/
+          retention-days: 30
+
+      - name: Commit images to repo
+        if: inputs.commit_images == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add images/ || true
+          if git diff --staged --quiet; then
+            echo "No new images to commit"
+          else
+            git commit -m "Add ${{ inputs.slug }}/${{ inputs.chapter }} images"
+            git push
+          fi
