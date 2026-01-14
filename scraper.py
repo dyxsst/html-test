@@ -72,13 +72,14 @@ def scrape_chapter(slug: str, chapter: str, start: int, end: int, out_dir: str, 
     print("-" * 50)
 
     with sync_playwright() as pw:
-        # Launch with args to avoid detection
+        # Launch HEADED browser (works better with Cloudflare when using xvfb)
         browser = pw.chromium.launch(
-            headless=True,
+            headless=False,  # Headed mode bypasses Cloudflare better
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
+                "--disable-gpu",
             ]
         )
         context = browser.new_context(

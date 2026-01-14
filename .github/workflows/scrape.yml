@@ -55,6 +55,9 @@ jobs:
       - name: Install Playwright browsers
         run: python -m playwright install chromium --with-deps
 
+      - name: Install xvfb for headed browser
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
       - name: Run scraper
         env:
           SLUG: ${{ inputs.slug }}
@@ -63,7 +66,7 @@ jobs:
           END_PAGE: ${{ inputs.end_page }}
           OUT_DIR: images
         run: |
-          python scraper.py \
+          xvfb-run --auto-servernum python scraper.py \
             --slug "$SLUG" \
             --chapter "$CHAPTER" \
             --start "$START_PAGE" \
