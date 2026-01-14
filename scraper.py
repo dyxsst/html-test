@@ -79,7 +79,12 @@ def scrape_chapter(slug: str, chapter: str, start: int, end: int, out_dir: str, 
         page = context.new_page()
 
         try:
-            page.goto(chapter_url, wait_until="networkidle", timeout=60000)
+            # Use domcontentloaded instead of networkidle (ads never stop loading)
+            page.goto(chapter_url, wait_until="domcontentloaded", timeout=30000)
+            # Wait for images to appear (manga reader content)
+            page.wait_for_selector("img", timeout=15000)
+            # Give a moment for lazy-loaded images to register
+            page.wait_for_timeout(3000)
         except Exception as e:
             print(f"Failed to load page: {e}")
             browser.close()
